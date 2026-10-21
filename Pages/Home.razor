@@ -1,0 +1,97 @@
+@page "/"
+@using System.Net
+@using System.Net.Http.Json
+@using BlazorWasmBrasilApiCep.Models
+@inject HttpClient Http
+
+<PageTitle>Consulta CEP - BrasilAPI</PageTitle>
+
+<h1>Consulta de CEP com Blazor WebAssembly</h1>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label for="cepInput" class="form-label">Digite o CEP:</label>
+        <input id="cepInput" class="form-control" @bind="cepDigitado" placeholder="Ex: 01001000" maxlength="9" />
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" @onclick="ConsultarCep" disabled="@carregando">
+            @(carregando ? "Buscando..." : "Consultar")
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(mensagemErro))
+{
+    <div class="alert alert-danger">@mensagemErro</div>
+}
+
+@if (resultado != null)
+{
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title text-success">Endereço Encontrado</h4>
+            <p><strong>CEP:</strong> @resultado.Numero</p>
+            <p><strong>Logradouro:</strong> @resultado.Street</p>
+            <p><strong>Bairro:</strong> @resultado.Neighborhood</p>
+            <p><strong>Cidade:</strong> @resultado.City (@resultado.State)</p>
+            <p><strong>Serviço:</strong> @resultado.Service</p>
+
+            @if (resultado.Ibge != null)
+            {
+                <hr />
+                <h5 class="text-muted">Dados do IBGE</h5>
+                <p><strong>Cidade IBGE:</strong> @resultado.Ibge.City</p>
+                <p><strong>Estado IBGE:</strong> @resultado.Ibge.State</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string cepDigitado = string.Empty;
+    private string mensagemErro = string.Empty;
+    private bool carregando;
+    private Cep? resultado;
+
+    private async Task ConsultarCep()
+    {
+        mensagemErro = string.Empty;
+        resultado = null;
+
+        var cep = new string(cepDigitado.Where(char.IsDigit).ToArray());
+
+        if (cep.Length != 8)
+        {
+            mensagemErro = "Informe um CEP válido com 8 dígitos.";
+            return;
+        }
+
+        carregando = true;
+
+        try
+        {
+            var resposta = await Http.GetAsync($"api/cep/v2/{cep}");
+
+            if (resposta.StatusCode == HttpStatusCode.NotFound)
+            {
+                mensagemErro = "CEP não encontrado.";
+            }
+            else if (!resposta.IsSuccessStatusCode)
+            {
+                mensagemErro = $"Erro ao consultar a API ({(int)resposta.StatusCode}).";
+            }
+            else
+            {
+                resultado = await resposta.Content.ReadFromJsonAsync<Cep>();
+            }
+        }
+        catch (HttpRequestException)
+        {
+            mensagemErro = "Não foi possível conectar à BrasilAPI. Verifique sua conexão.";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+}
